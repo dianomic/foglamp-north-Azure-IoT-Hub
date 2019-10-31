@@ -37,6 +37,9 @@ AZURE_IOTHUB::AZURE_IOTHUB() :
         OpenSSL_add_all_algorithms();
         OpenSSL_add_all_digests();
         OpenSSL_add_all_ciphers();
+
+	Logger::getLogger()->setMinLevel("debug");
+	m_log->debug("call AZURE_IOTHUB");
 }
 
 /**
@@ -54,6 +57,8 @@ AZURE_IOTHUB::~AZURE_IOTHUB()
                 free(m_jwtAPI);
                 m_jwtAPI = NULL;
         }
+	Logger::getLogger()->setMinLevel("debug");
+	m_log->debug("call ~AZURE_IOTHUB");
 }
 
 
@@ -72,6 +77,7 @@ void AZURE_IOTHUB::configure(const ConfigCategory *conf)
 		m_log->error("Missing Azure IoT-Hub name in configuration");
 
 	// To be implemented
+	Logger::getLogger()->setMinLevel("debug");
 	m_log->debug("call configure");
 }
 
@@ -85,6 +91,8 @@ int AZURE_IOTHUB::connect()
 	int rc = -1;
 
 	// To be implemented
+	rc = MQTTCLIENT_SUCCESS;
+	Logger::getLogger()->setMinLevel("debug");
 	m_log->debug("call connect");
 
 	return rc;
@@ -101,7 +109,9 @@ uint32_t AZURE_IOTHUB::send(const vector<Reading *>& readings)
 	uint32_t	n = 0;
 
 	// To be implemented
-	m_log->debug("call send");
+	n = 10;
+	Logger::getLogger()->setMinLevel("debug");
+	m_log->debug("call send new");
 
 	return n;
 }

@@ -67,7 +67,7 @@ AZURE_IOTHUB::~AZURE_IOTHUB()
 void AZURE_IOTHUB::configure(const ConfigCategory *conf)
 {
 	if (conf->itemExists("iot_hub_name"))
-		m_iotHubName conf->getValue("iot_hub_name");
+		m_iotHubName = conf->getValue("iot_hub_name");
 	else
 		m_log->error("Missing Azure IoT-Hub name in configuration");
 
@@ -96,7 +96,7 @@ int AZURE_IOTHUB::connect()
  * @param readings	The readings to send
  * @return 		The number of readings sent
  */
-uint32_t GCP::send(const vector<Reading *>& readings)
+uint32_t AZURE_IOTHUB::send(const vector<Reading *>& readings)
 {
 	uint32_t	n = 0;
 

@@ -29,7 +29,7 @@ using namespace rapidjson;
 
 extern "C" {
 
-#define PLUGIN_NAME "AZURE_IOTHUB"
+#define PLUGIN_NAME "azure_iothub"
 
 /**
  * Plugin specific default configuration

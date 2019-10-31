@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.4.0)
 
 # Set the plugin name to build
-project(AZURE_IOTHUB)
+project(azure_iothub)
 
 # Supported options:
 # -DFOGLAMP_INCLUDE

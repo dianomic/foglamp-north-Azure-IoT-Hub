@@ -18,6 +18,9 @@ class AZURE_IOTHUB {
 		uint32_t	send(const std::vector<Reading *>& readings);
 
 	private:
+		void		getDevices();
+		std::string	getAuthToken();
+
 		MQTTClient	m_client;
 		Logger		*m_log;
 		char		*m_jwtStr;
@@ -29,6 +32,10 @@ class AZURE_IOTHUB {
 		time_t		m_jwtExpire;
 
 		std::string	m_iotHubName;
+
+		static const std::string
+				m_apiAddress;
+		std::string	m_authToken;
 };
 
 #endif

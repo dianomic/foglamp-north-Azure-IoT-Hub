@@ -24,10 +24,6 @@ make  && sudo make install
 #
 # paho.mqtt.c
 #
-
-# TODO : to be verified
 sudo apt-get install -y libssl1.0.0
-
 cd ../paho.mqtt.c
 make && sudo make install
-

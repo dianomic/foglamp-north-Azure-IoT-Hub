@@ -26,6 +26,9 @@
 using namespace rapidjson;
 using namespace std;
 
+// FIXME_I:
+const string AZURE_IOTHUB::m_apiAddress("TBD");
+
 /**
  * Constructor for the AZURE_IOTHUB object
  */
@@ -79,6 +82,9 @@ void AZURE_IOTHUB::configure(const ConfigCategory *conf)
 	// To be implemented
 	Logger::getLogger()->setMinLevel("debug");
 	m_log->debug("call configure");
+
+	// Populate the list of devices from GCP
+	getDevices();
 }
 
 /**
@@ -115,5 +121,46 @@ uint32_t AZURE_IOTHUB::send(const vector<Reading *>& readings)
 
 	return n;
 }
+
+/**
+ * Populate the list of devices defined in the IoT Hub registry
+ */
+void AZURE_IOTHUB::getDevices()
+{
+	HttpsClient sender(m_apiAddress, false);
+	SimpleWeb::CaseInsensitiveMultimap header;
+	char		url[1024];
+
+	header.emplace("Content-Type", "application/x-www-form-urlencoded");
+	header.emplace("Authorization", "Bearer " + getAuthToken());
+
+	// To be implemented
+	// FIXME_I:
+	Logger::getLogger()->setMinLevel("debug");
+	m_log->debug("call getDevices");
+}
+
+
+/**
+ * Get an authentication token for the Azure IoT-Hub
+ *
+ * @return The authentication token
+ */
+string AZURE_IOTHUB::getAuthToken()
+{
+	// FIXME_I:
+	HttpsClient sender("TBD", false);
+	SimpleWeb::CaseInsensitiveMultimap header;
+	char		auth[1024];
+
+	// To be implemented
+	// FIXME_I:
+	m_authToken = "";
+	Logger::getLogger()->setMinLevel("debug");
+	m_log->debug("call getAuthToken");
+
+	return m_authToken;
+}
+
 
 

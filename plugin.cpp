@@ -89,10 +89,17 @@ PLUGIN_INFORMATION *plugin_info()
  */
 PLUGIN_HANDLE plugin_init(ConfigCategory* configData)
 {
+	// FIXME_I:
+	Logger *m_log = Logger::getLogger();
+	Logger::getLogger()->setMinLevel("debug");
+	m_log->debug("call plugin_init start ");
 
 	AZURE_IOTHUB *azure_iothub = new AZURE_IOTHUB();
 	azure_iothub->configure(configData);
 	azure_iothub->connect();
+
+	// FIXME_I:
+	m_log->debug("call plugin_init start ");
 
 	return (PLUGIN_HANDLE)azure_iothub;
 }
@@ -124,3 +131,11 @@ void plugin_shutdown(PLUGIN_HANDLE handle)
 
 // End of extern "C"
 };
+
+// FIXME_I:
+int main (){
+	Logger *m_log = Logger::getLogger();
+	// FIXME_I:
+	m_log->debug("DBG - azure_test start");
+
+}

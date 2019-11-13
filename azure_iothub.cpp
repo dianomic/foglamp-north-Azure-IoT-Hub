@@ -23,11 +23,155 @@
 #include "simple_https.h"
 #include <rapidjson/document.h>
 
+#include "iothub.h"
+#include "azure_c_shared_utility/shared_util_options.h"
+#include "azure_c_shared_utility/http_proxy_io.h"
+#include "azure_c_shared_utility/threadapi.h"
+
+#include "azure_prov_client/prov_device_client.h"
+#include "azure_prov_client/prov_security_factory.h"
+
+// MQTT protocol
+#include "iothubtransportmqtt.h"
+#include "azure_prov_client/prov_transport_mqtt_client.h"
+
 using namespace rapidjson;
 using namespace std;
 
 // FIXME_I:
 const string AZURE_IOTHUB::m_apiAddress("TBD");
+
+
+// Azure IoT hub
+#define PROTOCOL_MQTT
+
+// FIXME_I:
+// This sample is to demostrate iothub reconnection with provisioning and should not
+// be confused as production code
+
+MU_DEFINE_ENUM_STRINGS_WITHOUT_INVALID(PROV_DEVICE_RESULT, PROV_DEVICE_RESULT_VALUE);
+MU_DEFINE_ENUM_STRINGS_WITHOUT_INVALID(PROV_DEVICE_REG_STATUS, PROV_DEVICE_REG_STATUS_VALUES);
+
+
+static const char* global_prov_uri = "global.azure-devices-provisioning.net";
+// FIXME_I:
+static const char* id_scope = "0ne0009009E";
+
+static bool g_registration_complete = false;
+static bool g_use_proxy = false;
+static const char* PROXY_ADDRESS = "127.0.0.1";
+
+#define PROXY_PORT                  8888
+#define MESSAGES_TO_SEND            2
+#define TIME_BETWEEN_MESSAGES       2
+
+static void registration_status_callback(PROV_DEVICE_REG_STATUS reg_status, void* user_context)
+{
+	// FIXME_I:
+	Logger *logger = Logger::getLogger();
+
+	(void)user_context;
+	logger->debug("Azure - Provisioning Status: %s", MU_ENUM_TO_STRING(PROV_DEVICE_REG_STATUS, reg_status));
+}
+
+static void register_device_callback(PROV_DEVICE_RESULT register_result, const char* iothub_uri, const char* device_id, void* user_context)
+{
+	// FIXME_I:
+	Logger *logger = Logger::getLogger();
+
+	(void)user_context;
+	if (register_result == PROV_DEVICE_RESULT_OK)
+	{
+		logger->debug("Azure - Registration Information received from service: %s, deviceId: %s", iothub_uri, device_id);
+	}
+	else
+	{
+		logger->error("Azure - Failure registering device: %s", MU_ENUM_TO_STRING(PROV_DEVICE_RESULT, register_result));
+	}
+	g_registration_complete = true;
+}
+
+
+
+int azure_test(string device_id)
+{
+	// FIXME_I:
+	string step="11";
+	string symmetric_Key="JcFuZlmFxbZ1UL7pLA9BSxgHM3UqrGNVODVMx9DkAtw=";
+
+	// FIXME_I:
+	Logger *logger = Logger::getLogger();
+	logger->debug("DBG - azure_test %s start",step.c_str());
+
+	SECURE_DEVICE_TYPE hsm_type;
+	// FIXME_I:
+	hsm_type = SECURE_DEVICE_TYPE_SYMMETRIC_KEY;
+
+	// Used to initialize IoTHub SDK subsystem
+	(void)IoTHub_Init();
+	(void)prov_dev_security_init(hsm_type);
+
+	logger->debug("DBG - azure_test %s step",step.c_str());
+
+	// FIXME_I:
+	// Set the symmetric key if using they auth type
+	prov_dev_set_symmetric_key_info(device_id.c_str(), symmetric_Key.c_str());
+
+	PROV_DEVICE_TRANSPORT_PROVIDER_FUNCTION prov_transport;
+
+	// Protocol to USE - HTTP, AMQP, AMQP_WS, MQTT, MQTT_WS
+#ifdef PROTOCOL_MQTT
+	prov_transport = Prov_Device_MQTT_Protocol;
+#endif
+
+	// FIXME_I:
+	//logger->debug("Azure - Provisioning API Version: %s\r\n", Prov_Device_GetVersionString());
+
+	logger->debug("DBG - azure_test %s step 2",step.c_str());
+
+	PROV_DEVICE_RESULT prov_device_result = PROV_DEVICE_RESULT_ERROR;
+	PROV_DEVICE_HANDLE prov_device_handle;
+	if ((prov_device_handle = Prov_Device_Create(global_prov_uri, id_scope, prov_transport)) == NULL)
+	{
+		logger->error("Azure - failed calling Prov_Device_Create\r\n");
+		return -1;
+	}
+	else
+	{
+		logger->debug("DBG - azure_test %s step 2.1",step.c_str());
+
+		prov_device_result = Prov_Device_Register_Device(prov_device_handle, register_device_callback, NULL, registration_status_callback, NULL);
+
+		logger->debug("Azure - Registering device :%s:", device_id.c_str());
+		// FIXME_I:
+		int i=0;
+		do
+		{
+			i++;
+			ThreadAPI_Sleep(1000);
+		} while ( (!g_registration_complete) && i < 10);
+
+		if (!g_registration_complete)
+		{
+			logger->debug("Azure - Registration failed for device :%s:", device_id.c_str());
+		}
+
+		Prov_Device_Destroy(prov_device_handle);
+	}
+
+	logger->debug("DBG - azure_test %s step 3",step.c_str());
+
+	prov_dev_security_deinit();
+
+	// Free all the sdk subsystem
+	IoTHub_Deinit();
+
+	logger->debug("DBG - azure_test %s  end",step.c_str());
+
+	return 0;
+}
+
+
 
 /**
  * Constructor for the AZURE_IOTHUB object
@@ -43,6 +187,11 @@ AZURE_IOTHUB::AZURE_IOTHUB() :
 
 	Logger::getLogger()->setMinLevel("debug");
 	m_log->debug("call AZURE_IOTHUB");
+
+	// FIXME_I:
+	m_log->debug("DBG - call test start");
+	azure_test("sinusoid11");
+	m_log->debug("DBG - call test end");
 }
 
 /**
@@ -119,6 +268,13 @@ uint32_t AZURE_IOTHUB::send(const vector<Reading *>& readings)
 	Logger::getLogger()->setMinLevel("debug");
 	m_log->debug("call send new");
 
+//	for(auto &item : readings) {
+//		m_log->debug("DBG0 send send new");
+//		item.getAssetName();
+//	}
+
+
+
 	return n;
 }
 
@@ -161,6 +317,4 @@ string AZURE_IOTHUB::getAuthToken()
 
 	return m_authToken;
 }
-
-
 

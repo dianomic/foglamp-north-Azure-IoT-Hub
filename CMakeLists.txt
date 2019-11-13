@@ -51,6 +51,14 @@ endif()
 # Add ./include
 include_directories(include)
 
+# Azure IoT sdk
+include_directories(${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/iothub_client/inc)
+include_directories(${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/provisioning_client/inc)
+include_directories(${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/provisioning_client/inc/azure_prov_client)
+include_directories(${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/c-utility/deps/umock-c/inc)
+include_directories(${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/c-utility/deps/umock-c/deps/azure-macro-utils-c/inc)
+include_directories(${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/c-utility/inc)
+
 # Add /usr/local/include
 include_directories(/usr/local/include)
 
@@ -64,7 +72,20 @@ if (FOGLAMP_SRC)
 endif()
 
 # Add FogLAMP lib path
-link_directories(${FOGLAMP_LIB_DIRS} /usr/local/lib)
+link_directories(
+		${FOGLAMP_LIB_DIRS}
+		/usr/local/lib
+)
+
+# Azure IoT sdk
+link_directories(
+		${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/cmake
+		${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/cmake/c-utility
+		${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/cmake/iothub_client
+		${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/cmake/provisioning_client
+		${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/cmake/umqtt
+		${PROJECT_SOURCE_DIR}/azure-iot-sdk-c/cmake/deps/uhttp
+)
 
 # Create shared library
 add_library(${PROJECT_NAME} SHARED ${SOURCES} version.h)
@@ -72,8 +93,28 @@ add_library(${PROJECT_NAME} SHARED ${SOURCES} version.h)
 # Add FogLAMP library names
 target_link_libraries(${PROJECT_NAME} ${NEEDED_FOGLAMP_LIBS})
 
+#// FIXME_I:
+# Azure IoT sdk
+target_link_libraries(${PROJECT_NAME}
+        umqtt
+		iothub_client_mqtt_transport
+		iothub_client
+		prov_auth_client
+		hsm_security_client
+		uhttp
+		aziotsharedutil
+		parson
+		umqtt
+		iothub_client_mqtt_ws_transport
+		prov_device_client
+		prov_device_ll_client
+		prov_mqtt_transport
+		prov_mqtt_ws_transport
+		uhttp
+)
+
 # Add additional libraries
-target_link_libraries(${PROJECT_NAME} -lssl -lcrypto -lpaho-mqtt3cs -ljwt)
+target_link_libraries(${PROJECT_NAME} -lssl -lcrypto -lpaho-mqtt3cs -ljwt -lcurl)
 
 # Set the build version 
 set_target_properties(${PROJECT_NAME} PROPERTIES SOVERSION 1)

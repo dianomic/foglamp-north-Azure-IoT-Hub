@@ -136,6 +136,6 @@ void plugin_shutdown(PLUGIN_HANDLE handle)
 int main (){
 	Logger *m_log = Logger::getLogger();
 	// FIXME_I:
-	m_log->debug("DBG - azure_test start");
+	m_log->debug("DBG - azure_provision_device start");
 
 }

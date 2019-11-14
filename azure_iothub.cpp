@@ -92,16 +92,72 @@ static void register_device_callback(PROV_DEVICE_RESULT register_result, const c
 }
 
 
+// FIXME_I:
+#include <cstdio>
+#include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <array>
 
-int azure_test(string device_id)
+/**
+ * Strips Line feed and carige return
+ *
+ */
+void StringStripCRLF2(std::string& StringToManage)
+{
+	string::size_type pos = 0;
+
+	StringToManage.erase( std::remove(StringToManage.begin(), StringToManage.end(), '\r'), StringToManage.end() );
+
+	StringToManage.erase(std::remove(StringToManage.begin(), StringToManage.end(), '\n'), StringToManage.end());
+
+}
+
+// FIXME_I: temporary function
+std::string exec(const char* cmd) {
+
+	std::array<char, 128> buffer;
+	std::string result;
+	std::string line;
+	std::shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
+	if (!pipe) throw std::runtime_error("popen() failed!");
+	while (!feof(pipe.get())) {
+		if (fgets(buffer.data(), 128, pipe.get()) != nullptr)
+		{
+			line = buffer.data();
+			StringStripCRLF2(line);
+			result += line;
+		}
+	}
+	return result;
+}
+
+
+string azure_calc_hash(string &device_id)
+{
+	Logger *logger = Logger::getLogger();
+
+	string symmetric_Key="xZdonZMjyuw4AsAYsw8kqmvWT9W8H6JIQvzQTPsLZz4BZ7z+lE0jDn16c+2qExzDOIiK9GuqpOFrf8U48CJbMg==";
+
+	string cmd="echo -n " + device_id + " | openssl sha256 -mac HMAC -macopt hexkey:$(echo " + symmetric_Key + " | base64 --decode | xxd -p -u -c 1000)  -binary | base64";
+	string output=exec(cmd.c_str());
+
+	logger->debug("DBG - azure_calc_hash cmd :%s: output :%s:",cmd.c_str(), output.c_str() );
+
+	return output;
+}
+
+int azure_provision_device(string device_id)
 {
 	// FIXME_I:
 	string step="11";
-	string symmetric_Key="JcFuZlmFxbZ1UL7pLA9BSxgHM3UqrGNVODVMx9DkAtw=";
 
-	// FIXME_I:
+	string symmetric_Key;
 	Logger *logger = Logger::getLogger();
-	logger->debug("DBG - azure_test %s start",step.c_str());
+	logger->debug("DBG - azure_provision_device %s start",step.c_str());
+
+	symmetric_Key = azure_calc_hash(device_id);
 
 	SECURE_DEVICE_TYPE hsm_type;
 	// FIXME_I:
@@ -111,7 +167,7 @@ int azure_test(string device_id)
 	(void)IoTHub_Init();
 	(void)prov_dev_security_init(hsm_type);
 
-	logger->debug("DBG - azure_test %s step",step.c_str());
+	logger->debug("DBG - azure_provision_device %s step",step.c_str());
 
 	// FIXME_I:
 	// Set the symmetric key if using they auth type
@@ -127,7 +183,7 @@ int azure_test(string device_id)
 	// FIXME_I:
 	//logger->debug("Azure - Provisioning API Version: %s\r\n", Prov_Device_GetVersionString());
 
-	logger->debug("DBG - azure_test %s step 2",step.c_str());
+	logger->debug("DBG - azure_provision_device %s step 2",step.c_str());
 
 	PROV_DEVICE_RESULT prov_device_result = PROV_DEVICE_RESULT_ERROR;
 	PROV_DEVICE_HANDLE prov_device_handle;
@@ -138,11 +194,11 @@ int azure_test(string device_id)
 	}
 	else
 	{
-		logger->debug("DBG - azure_test %s step 2.1",step.c_str());
+		logger->debug("DBG - azure_provision_device %s step 2.1",step.c_str());
 
 		prov_device_result = Prov_Device_Register_Device(prov_device_handle, register_device_callback, NULL, registration_status_callback, NULL);
 
-		logger->debug("Azure - Registering device :%s:", device_id.c_str());
+		logger->debug("Azure - Registering device :%s:  key :%s:", device_id.c_str(), symmetric_Key.c_str() );
 		// FIXME_I:
 		int i=0;
 		do
@@ -159,14 +215,14 @@ int azure_test(string device_id)
 		Prov_Device_Destroy(prov_device_handle);
 	}
 
-	logger->debug("DBG - azure_test %s step 3",step.c_str());
+	logger->debug("DBG - azure_provision_device %s step 3",step.c_str());
 
 	prov_dev_security_deinit();
 
 	// Free all the sdk subsystem
 	IoTHub_Deinit();
 
-	logger->debug("DBG - azure_test %s  end",step.c_str());
+	logger->debug("DBG - azure_provision_device %s  end",step.c_str());
 
 	return 0;
 }
@@ -190,7 +246,7 @@ AZURE_IOTHUB::AZURE_IOTHUB() :
 
 	// FIXME_I:
 	m_log->debug("DBG - call test start");
-	azure_test("sinusoid11");
+
 	m_log->debug("DBG - call test end");
 }
 
@@ -268,10 +324,12 @@ uint32_t AZURE_IOTHUB::send(const vector<Reading *>& readings)
 	Logger::getLogger()->setMinLevel("debug");
 	m_log->debug("call send new");
 
-//	for(auto &item : readings) {
-//		m_log->debug("DBG0 send send new");
-//		item.getAssetName();
-//	}
+	// FIXME_I:
+	for(auto &item : readings) {
+		m_log->debug("DBG0 send send new :%s:", item->getAssetName().c_str());
+
+		azure_provision_device(item->getAssetName());
+	}
 
 
 

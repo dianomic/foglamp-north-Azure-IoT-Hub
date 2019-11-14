@@ -8,6 +8,8 @@
 #include <jwt.h>
 #include <set>
 
+using namespace std;
+
 class AZURE_IOTHUB {
 	public:
 		AZURE_IOTHUB();
@@ -16,6 +18,11 @@ class AZURE_IOTHUB {
 		void		configure(const ConfigCategory *conf);
 		int		connect();
 		uint32_t	send(const std::vector<Reading *>& readings);
+
+                int             provision_device(string device_id);
+                string          calc_hash(string &device_id);
+                int             send_data(Reading *reading);
+		string          makePayload(Reading *reading);
 
 	private:
 		void		getDevices();

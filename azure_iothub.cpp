@@ -134,7 +134,7 @@ std::string exec(const char* cmd) {
 }
 
 
-string azure_calc_hash(string &device_id)
+string AZURE_IOTHUB::calc_hash(string &device_id)
 {
 	Logger *logger = Logger::getLogger();
 
@@ -143,12 +143,53 @@ string azure_calc_hash(string &device_id)
 	string cmd="echo -n " + device_id + " | openssl sha256 -mac HMAC -macopt hexkey:$(echo " + symmetric_Key + " | base64 --decode | xxd -p -u -c 1000)  -binary | base64";
 	string output=exec(cmd.c_str());
 
-	logger->debug("DBG - azure_calc_hash cmd :%s: output :%s:",cmd.c_str(), output.c_str() );
+	logger->debug("DBG - calc_hash cmd :%s: output :%s:",cmd.c_str(), output.c_str() );
 
 	return output;
 }
 
-int azure_provision_device(string device_id)
+
+int AZURE_IOTHUB::send_data(Reading *reading)
+{
+	// FIXME_I:
+	string payload = makePayload(reading);
+	string assetName = reading->getAssetName();
+	char topic[1024];
+
+	snprintf(topic, sizeof(topic), "devices/%s/messages/events/", assetName.c_str());
+
+}
+
+/**
+ * Construct a payload from a single reading.
+ *
+ * @param reading	The reading to use for payload construction
+ * @return	The JSON payload
+ */
+string AZURE_IOTHUB::makePayload(Reading *reading)
+{
+	string payload = "{";
+	struct timeval tm;
+	reading->getTimestamp(&tm);
+	payload += "\"ts\" : \"";
+	// Add timestamp
+	payload += reading->getAssetDateUserTime(Reading::FMT_DEFAULT, true);
+	payload += "\", ";
+	string assetName = reading->getAssetName();
+	vector<Datapoint *> dpv = reading->getReadingData();
+	for (auto dp = dpv.cbegin(); dp != dpv.cend(); dp++)
+	{
+		payload += (*dp)->toJSONProperty();
+		if ((dp + 1) != dpv.cend())
+		{
+			payload += ", ";
+		}
+	}
+	payload += "}";
+	return payload;
+}
+
+int AZURE_IOTHUB::provision_device(std::string device_id)
 {
 	// FIXME_I:
 	string step="11";
@@ -157,7 +198,7 @@ int azure_provision_device(string device_id)
 	Logger *logger = Logger::getLogger();
 	logger->debug("DBG - azure_provision_device %s start",step.c_str());
 
-	symmetric_Key = azure_calc_hash(device_id);
+	symmetric_Key = calc_hash(device_id);
 
 	SECURE_DEVICE_TYPE hsm_type;
 	// FIXME_I:
@@ -325,10 +366,11 @@ uint32_t AZURE_IOTHUB::send(const vector<Reading *>& readings)
 	m_log->debug("call send new");
 
 	// FIXME_I:
-	for(auto &item : readings) {
+	for(Reading *item : readings) {
 		m_log->debug("DBG0 send send new :%s:", item->getAssetName().c_str());
 
-		azure_provision_device(item->getAssetName());
+		provision_device(item->getAssetName());
+		send_data(item);
 	}
 
 

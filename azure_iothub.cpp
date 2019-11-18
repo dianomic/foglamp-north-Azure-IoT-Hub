@@ -23,13 +23,24 @@
 #include "simple_https.h"
 #include <rapidjson/document.h>
 
+// Azure - Provision device
 #include "iothub.h"
 #include "azure_c_shared_utility/shared_util_options.h"
 #include "azure_c_shared_utility/http_proxy_io.h"
 #include "azure_c_shared_utility/threadapi.h"
-
 #include "azure_prov_client/prov_device_client.h"
 #include "azure_prov_client/prov_security_factory.h"
+
+// Azure - Send message
+#include "iothub_device_client.h"
+#include "iothub_client_options.h"
+#include "iothub_message.h"
+#include "azure_c_shared_utility/threadapi.h"
+#include "azure_c_shared_utility/crt_abstractions.h"
+#include "azure_c_shared_utility/platform.h"
+#include "azure_c_shared_utility/shared_util_options.h"
+#include "azure_c_shared_utility/tickcounter.h"
+#include "iothubtransportmqtt.h"
 
 // MQTT protocol
 #include "iothubtransportmqtt.h"
@@ -65,6 +76,21 @@ static const char* PROXY_ADDRESS = "127.0.0.1";
 #define MESSAGES_TO_SEND            2
 #define TIME_BETWEEN_MESSAGES       2
 
+// Azure - Send message
+/* Paste in your device connection string  */
+// FIXME_I:
+static const char* connectionString = "HostName=diaiothubname.azure-devices.net;DeviceId=fogbench_luxometer;SharedAccessKey=38duJSw70+mWrlDzBMslctt7mK8Zj4jWKMPc5+V4qTE=";
+
+int g_interval = 1000;
+static size_t g_message_count_send_confirmations = 0;
+
+static const char* proxy_host = NULL;    // "Web proxy name here"
+static int proxy_port = 0;               // Proxy port
+static const char* proxy_username = NULL; // Proxy user name
+static const char* proxy_password = NULL; // Proxy password
+
+
+
 static void registration_status_callback(PROV_DEVICE_REG_STATUS reg_status, void* user_context)
 {
 	// FIXME_I:
@@ -89,6 +115,16 @@ static void register_device_callback(PROV_DEVICE_RESULT register_result, const c
 		logger->error("Azure - Failure registering device: %s", MU_ENUM_TO_STRING(PROV_DEVICE_RESULT, register_result));
 	}
 	g_registration_complete = true;
+}
+
+static void send_confirm_callback(IOTHUB_CLIENT_CONFIRMATION_RESULT result, void* userContextCallback)
+{
+	Logger *logger = Logger::getLogger();
+
+	(void)userContextCallback;
+	// When a message is sent this callback will get invoked
+	g_message_count_send_confirmations++;
+	logger->debug("Azure - Confirmation callback received for message %lu with result :%s:", (unsigned long)g_message_count_send_confirmations, MU_ENUM_TO_STRING(IOTHUB_CLIENT_CONFIRMATION_RESULT, result));
 }
 
 
@@ -149,14 +185,161 @@ string AZURE_IOTHUB::calc_hash(string &device_id)
 }
 
 
+static int device_method_callback(const char* method_name, const unsigned char* payload, size_t size, unsigned char** response, size_t* resp_size, void* userContextCallback)
+{
+	Logger *logger = Logger::getLogger();
+
+	const char* SetTelemetryIntervalMethod = "SetTelemetryInterval";
+	const char* device_id = (const char*)userContextCallback;
+	char* end = NULL;
+	int newInterval;
+
+	int status = 501;
+	const char* RESPONSE_STRING = "{ \"Response\": \"Unknown method requested.\" }";
+
+	logger->debug("Azure - Device Method called for device :%s:", device_id);
+	logger->debug("Azure - Device Method name :%s: ", method_name);
+	logger->debug("Azure - Device Method payload :%.*s:", (int)size, (const char*)payload);
+
+	if (strcmp(method_name, SetTelemetryIntervalMethod) == 0)
+	{
+		if (payload)
+		{
+			newInterval = (int)strtol((char*)payload, &end, 10);
+
+			// Interval must be greater than zero.
+			if (newInterval > 0)
+			{
+				// expect sec and covert to ms
+				g_interval = 1000 * (int)strtol((char*)payload, &end, 10);
+				status = 200;
+				RESPONSE_STRING = "{ \"Response\": \"Telemetry reporting interval updated.\" }";
+			}
+			else
+			{
+				status = 500;
+				RESPONSE_STRING = "{ \"Response\": \"Invalid telemetry reporting interval.\" }";
+			}
+		}
+	}
+
+	logger->debug("Azure - Response status :%d:", status);
+	logger->debug("Azure - Response payload :%s:", RESPONSE_STRING);
+
+	*resp_size = strlen(RESPONSE_STRING);
+	if ((*response = (unsigned char*) malloc(*resp_size)) == NULL)
+	{
+		status = -1;
+	}
+	else
+	{
+		memcpy(*response, RESPONSE_STRING, *resp_size);
+	}
+
+	return status;
+}
+
+
+static void connection_status_callback(IOTHUB_CLIENT_CONNECTION_STATUS result, IOTHUB_CLIENT_CONNECTION_STATUS_REASON reason, void* user_context)
+{
+	Logger *logger = Logger::getLogger();
+
+	(void)reason;
+	(void)user_context;
+	// This sample DOES NOT take into consideration network outages.
+	if (result == IOTHUB_CLIENT_CONNECTION_AUTHENTICATED)
+	{
+		logger->debug("Azure - The device client is connected to iothub");
+	}
+	else
+	{
+		logger->debug("Azure - The device client has been disconnected");
+	}
+}
+
+
 int AZURE_IOTHUB::send_data(Reading *reading)
 {
+	IOTHUB_MESSAGE_HANDLE message_handle;
+	IOTHUB_CLIENT_TRANSPORT_PROVIDER protocol;
+	IOTHUB_DEVICE_CLIENT_HANDLE device_handle;
+
+	Logger *logger = Logger::getLogger();
+
 	// FIXME_I:
 	string payload = makePayload(reading);
 	string assetName = reading->getAssetName();
-	char topic[1024];
 
-	snprintf(topic, sizeof(topic), "devices/%s/messages/events/", assetName.c_str());
+	protocol = MQTT_Protocol;
+
+	// Used to initialize IoTHub SDK subsystem
+	(void)IoTHub_Init();
+
+	logger->debug("Azure - Creating IoTHub handle");
+	// Create the iothub handle here
+	device_handle = IoTHubDeviceClient_CreateFromConnectionString(connectionString, protocol);
+	if (device_handle == NULL)
+	{
+		logger->error("Azure - Failure creating Iothub device.");
+	}
+	else
+	{
+		// Setting method callback to handle a SetTelemetryInterval method to control
+		//   how often telemetry messages are sent from the simulated device.
+		(void)IoTHubDeviceClient_SetDeviceMethodCallback(device_handle, device_method_callback, NULL);
+		// Setting connection status callback to get indication of connection to iothub
+		(void)IoTHubDeviceClient_SetConnectionStatusCallback(device_handle, connection_status_callback, NULL);
+
+		// Setting the frequency of DoWork calls by the underlying process thread.
+		// The value ms_delay is a delay between DoWork calls, in milliseconds.
+		// ms_delay can only be between 1 and 100 milliseconds.
+		// Without the SetOption, the delay defaults to 1 ms.
+		tickcounter_ms_t ms_delay = 10;
+		(void)IoTHubDeviceClient_SetOption(device_handle, OPTION_DO_WORK_FREQUENCY_IN_MS, &ms_delay);
+
+		// FIXME_I:
+		//Setting the auto URL Encoder (recommended for MQTT). Please use this option unless
+	        //you are URL Encoding inputs yourself.
+	        //ONLY valid for use with MQTT
+	        bool urlEncodeOn = true;
+	        (void)IoTHubDeviceClient_SetOption(device_handle, OPTION_AUTO_URL_ENCODE_DECODE, &urlEncodeOn);
+
+
+		message_handle = IoTHubMessage_CreateFromString(payload.c_str());
+
+		// Set Message property
+		(void)IoTHubMessage_SetMessageId(message_handle, "MSG_ID");
+		(void)IoTHubMessage_SetCorrelationId(message_handle, "CORE_ID");
+		(void)IoTHubMessage_SetContentTypeSystemProperty(message_handle, "application%2fjson");
+		(void)IoTHubMessage_SetContentEncodingSystemProperty(message_handle, "utf-8");
+
+		// Add custom properties to message
+		(void)IoTHubMessage_SetProperty(message_handle, "property_key", "property_value");
+
+		logger->debug("Azure - Sending message IoTHub message :%s: ", payload.c_str());
+		IoTHubDeviceClient_SendEventAsync(device_handle, message_handle, send_confirm_callback, NULL);
+
+		// The message is copied to the sdk so the we can destroy it
+		IoTHubMessage_Destroy(message_handle);
+
+		int sleepInterval = 1000;
+		int messagecount = 0;
+
+		g_message_count_send_confirmations = 0;
+
+		while(messagecount < 30 && g_message_count_send_confirmations == 0)
+		{
+			messagecount = messagecount + 1;
+
+			ThreadAPI_Sleep(sleepInterval);
+		}
+
+
+		// Clean up the iothub sdk handle
+		IoTHubDeviceClient_Destroy(device_handle);
+	}
+	// Free all the sdk subsystem
+	IoTHub_Deinit();
 
 }
 
@@ -369,8 +552,9 @@ uint32_t AZURE_IOTHUB::send(const vector<Reading *>& readings)
 	for(Reading *item : readings) {
 		m_log->debug("DBG0 send send new :%s:", item->getAssetName().c_str());
 
-		provision_device(item->getAssetName());
+		//provision_device(item->getAssetName());
 		send_data(item);
+		break;
 	}
 
 

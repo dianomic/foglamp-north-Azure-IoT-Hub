@@ -79,7 +79,7 @@ static const char* PROXY_ADDRESS = "127.0.0.1";
 // Azure - Send message
 /* Paste in your device connection string  */
 // FIXME_I:
-static const char* connectionString = "HostName=diaiothubname.azure-devices.net;DeviceId=fogbench_luxometer;SharedAccessKey=38duJSw70+mWrlDzBMslctt7mK8Zj4jWKMPc5+V4qTE=";
+string connectionString;
 
 int g_interval = 1000;
 static size_t g_message_count_send_confirmations = 0;
@@ -257,6 +257,22 @@ static void connection_status_callback(IOTHUB_CLIENT_CONNECTION_STATUS result, I
 	}
 }
 
+string AZURE_IOTHUB::get_connection_string(const string& assetName)
+{
+	string connectionString = "";
+
+	Logger *logger = Logger::getLogger();
+
+	string IiTHubName="diaiothubname";
+	string cmd= "az iot hub device-identity show-connection-string --hub-name " + IiTHubName + " --device-id " + assetName + " |  jq  --raw-output \".connectionString\" ";
+	connectionString=exec(cmd.c_str());
+
+	//connectionString="HostName=diaiothubname.azure-devices.net;DeviceId=fogbench_luxometer;SharedAccessKey=38duJSw70+mWrlDzBMslctt7mK8Zj4jWKMPc5+V4qTE=";
+
+	logger->debug("Azure - get_connection_string - device :%s: connectiuong string :%s:", assetName.c_str(), connectionString.c_str());
+
+	return (connectionString);
+}
 
 int AZURE_IOTHUB::send_data(Reading *reading)
 {
@@ -268,16 +284,18 @@ int AZURE_IOTHUB::send_data(Reading *reading)
 
 	// FIXME_I:
 	string payload = makePayload(reading);
-	string assetName = reading->getAssetName();
+	string assetName =reading->getAssetName();
 
 	protocol = MQTT_Protocol;
 
 	// Used to initialize IoTHub SDK subsystem
 	(void)IoTHub_Init();
 
+	connectionString = get_connection_string(assetName);
+
 	logger->debug("Azure - Creating IoTHub handle");
 	// Create the iothub handle here
-	device_handle = IoTHubDeviceClient_CreateFromConnectionString(connectionString, protocol);
+	device_handle = IoTHubDeviceClient_CreateFromConnectionString(connectionString.c_str(), protocol);
 	if (device_handle == NULL)
 	{
 		logger->error("Azure - Failure creating Iothub device.");

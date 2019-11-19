@@ -23,6 +23,7 @@ class AZURE_IOTHUB {
                 string          calc_hash(string &device_id);
                 int             send_data(Reading *reading);
 		string          makePayload(Reading *reading);
+                string          get_connection_string(const string &assetName);
 
 	private:
 		void		getDevices();

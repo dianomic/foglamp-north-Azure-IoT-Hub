@@ -1,0 +1,18 @@
+# vi
+*.swp
+
+# MacOS Finder
+.DS_Store
+._*
+
+# build
+build
+
+# packaging
+packages/build
+
+# Editor
+.idea/
+
+# librdkafka library
+librdkafka/
